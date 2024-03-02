@@ -1,0 +1,17 @@
+[package]
+name = "stm32f3-pcm"
+version = "0.1.0"
+edition = "2021"
+
+[package.metadata.docs.rs]
+features = ["stm32f303xc", "rt", "usb", "can", "enumset"]
+targets = ["thumbv7em-none-eabihf"]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+stm32f3xx-hal = { version = "0.10.0", features = ["rt", "stm32f303xc"] }
+chrono = "0.4.34"
+num-traits = "0.2"
+cortex-m-semihosting = "0.5.0"
+
