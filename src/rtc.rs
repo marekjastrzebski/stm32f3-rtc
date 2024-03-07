@@ -1,6 +1,5 @@
 use crate::datetime::{Bcd, BcdDate, BcdTime, DateAccess, TimeAccess};
-use chrono::{NaiveDate, NaiveTime};
-use stm32f3xx_hal::pac::rcc::BDCR;
+use datetime::{Date, Time};
 use stm32f3xx_hal::pac::{PWR, RCC, RTC};
 
 enum Init {
@@ -13,9 +12,26 @@ enum Protection {
     Disable,
 }
 
+/// Offers clock source options LSI, LSE and HSE. Two of this source can have bypass on,
+/// by filling bool parameter
 pub enum ClockSource {
+    /// Low Speed Internal clock source - it is built in microcontroller,
+    /// so you sure that you have this one. But you have to know that this one is not that accurate
+    /// like others.
     LSI,
+    /// Low Speed External clock source - it is external clock source, very accurate.
+    /// Please note that you can set bypass by setting bool argument. (Preferably should by true)
+    /// ```
+    /// use stm32f3_rtc::rtc::ClockSource;
+    /// ClockSource::LSE(true);
+    /// ```
     LSE(bool),
+    /// High Speed External clock source - it is external clock source, very accurate.
+    /// Please note that you can set bypass by setting bool argument. (Preferably should by true)
+    /// ```
+    /// use stm32f3_rtc::rtc::ClockSource;
+    /// ClockSource::HSE(true);
+    /// ```
     HSE(bool),
 }
 
@@ -30,57 +46,64 @@ struct Prediv {
 ///
 /// It contains default (most typical clocks frequencies) for LSI, LSE and HSE.
 /// You can run without any perscaller setup:
-/// - LSI - 40 kHz - this clock source might be not accurate
+/// - LSI - 40 kHz - this clock source might be not accurate. There might by sight
+/// differences in second counting frequency. But for sure you have this clock source
+/// because it is built in.
 /// - LSE - 32.768 kHz
-/// - HSE - 24MHz
+/// - HSE - 12MHz
 ///
 ///
 /// # Basic usage
 /// 1. Creating RTC instance
 /// ```
-/// use chrono::NaiveTime;
-/// use stm32f3xx_hal::pac::{Peripherals};
-/// use stm32f3xx_hal::prelude::*;
-/// use stm32f3_pcm::rtc::{Rtc, ClockSource};
-/// use cortex_m_semihosting::hprintln;
-/// ...
-/// let mut peripheral = Peripherals::take().unwrap();
-/// let rtc = Rtc::new(peripheral.RTC)
-///     .set_clock_source(ClockSource::LSI)
-///     .start_clock(&mut peripheral.PWR, &mut peripheral.RCC);
+/// use stm32f3_rtc::rtc::Rtc;
+/// use stm32f3xx_hal::pac;
+///
+/// let mut peripheral = pac::Peripherals::take().unwrap();
+/// let rtc = Rtc::new(peripheral.RTC).start_clock(&mut peripheral.PWR, &mut peripheral.RCC);
 /// ```
 ///
-/// 2. Setup and reed time:
+/// 2. Setup and read time:
 /// ```
-/// use chrono::NaiveTime;
-/// use stm32f3xx_hal::pac::{Peripherals};
-/// use stm32f3xx_hal::prelude::*;
-/// use stm32f3_pcm::rtc::{Rtc, ClockSource};
-/// use cortex_m_semihosting::hprintln;
-/// ...
-/// let mut peripheral = Peripherals::take().unwrap();
-/// let rtc = Rtc::new(peripheral.RTC)
-///     .set_clock_source(ClockSource::LSI)
-///     .start_clock(&mut peripheral.PWR, &mut peripheral.RCC);
-/// rtc.set_time(NaiveTime::from_hms_opt(12, 30, 10).unwrap());
-/// hprintln!("{:?}", rtc.time().format("%H:%M:%S").to_string());
-/// // print: 12:30:10
+/// use stm32f3_rtc::datetime::{Time, TimeAccess};
+/// use stm32f3_rtc::rtc::Rtc;
+/// use stm32f3xx_hal::pac;
+/// use cortex_m_semihosting;
+///
+/// let mut peripheral = pac::Peripherals::take().unwrap();
+/// let rtc = Rtc::new(peripheral.RTC).start_clock(&mut peripheral.PWR, &mut peripheral.RCC);
+/// rtc.set_time(Time::from(12,30,0));
+/// let time = rtc.time();
+/// hprintln!("{}:{}:{}", time.hour, time.minute, time.second);
+/// //Print: 12:30:0
 /// ```
 /// 3. Setup and read date:
 /// ```
-/// use chrono::NaiveDate;
-/// use stm32f3xx_hal::pac::{Peripherals};
-/// use stm32f3xx_hal::prelude::*;
-/// use stm32f3_pcm::rtc::{Rtc, ClockSource};
-/// use cortex_m_semihosting::hprintln;
-/// ...
-/// let mut peripheral = Peripherals::take().unwrap();
+/// use stm32f3_rtc::datetime::{Date, DateAccess};
+/// use stm32f3_rtc::rtc::Rtc;
+/// use stm32f3xx_hal::pac;
+/// use cortex_m_semihosting;
+///
+/// let mut peripheral = pac::Peripherals::take().unwrap();
+/// let rtc = Rtc::new(peripheral.RTC).start_clock(&mut peripheral.PWR, &mut peripheral.RCC);
+/// rtc.set_date(Date::from(1,1,2024));
+/// let date = rtc.date();
+/// hprintln!("{}.{}.{}", date.day, date.month, date.year);
+/// //Print: 1.1.2024
+/// ```
+/// 4. Setup diferent clock source:
+/// This example shows how to run LSE clock with defoult prescalers for 32,768kHz frequency.
+/// You can pick your own prescalers by using set_prescalers() function. If you up to please read
+/// its documentation.
+/// ```
+/// use stm32f3_rtc::rtc::{ClockSource, Rtc};
+/// use stm32f3xx_hal::pac;
+/// use cortex_m_semihosting;
+///
+/// let mut peripheral = pac::Peripherals::take().unwrap();
 /// let rtc = Rtc::new(peripheral.RTC)
-///     .set_clock_source(ClockSource::LSI)
+///     .set_clock_source(ClockSource::LSE(true))
 ///     .start_clock(&mut peripheral.PWR, &mut peripheral.RCC);
-/// rtc.set_date(NaiveDate::from_ymd_opt(2024, 3, 1).unwrap());
-/// hprintln!("{:?}", rtc.date().format(""%Y-%m-%d"").to_string());
-/// // print: 2024-3-1
 /// ```
 pub struct Rtc {
     rtc: RTC,
@@ -95,12 +118,13 @@ impl Rtc {
         Self {
             rtc,
             unlock_key: (0xCA, 0x53),
-            source,
-            prediv: Prediv { a: 0, s: 0 },
+            source: ClockSource::LSI,
+            prediv: Prediv { a: 127, s: 319 },
             default: true,
         }
     }
-
+    /// Please select your own clock source, by picking it from ClockSource enum,
+    ///
     pub fn set_clock_source(&mut self, clock_source: ClockSource) -> &Self {
         self.source = clock_source;
         if !self.default {
@@ -109,43 +133,48 @@ impl Rtc {
         match self.source {
             ClockSource::LSI => {
                 // Default prediv for 40kHz clock
-                self.prediv = Prediv { a: 39, s: 999 };
+                self.prediv = Prediv { a: 127, s: 319 };
             }
-            ClockSource::LSE(bypass) => {
+            ClockSource::LSE(_) => {
                 // Default prediv for 32.768 kHz clock
                 self.prediv = Prediv { a: 127, s: 255 };
             }
-            ClockSource::HSE(bypass) => {
-                // Default prediv for 24 MHz clock
-                self.prediv = Prediv { a: 0, s: 0 };
+            ClockSource::HSE(_) => {
+                // Default prediv for 12 MHz clock
+                self.prediv = Prediv { a: 200, s: 60_000 };
             }
         }
         self
     }
 
+    /// If you want to set up your own precalers you have to define it here
+    /// you have to remember that you have to do it following this equation:
+    /// **Frequency = (PREDIV_A + 1) * (PREDIV_S + 1)**
     pub fn set_prescalers(&mut self, a: u8, s: u16) -> &Self {
         self.default = false;
         self.prediv = Prediv { a, s };
         self
     }
 
-    pub fn start_clock(&self, pwr: &mut PWR, rcc: &mut RCC) -> &Self {
-        self.enable_clock_source(&mut rcc.bdcr, rcc)
+    pub fn start_clock(&mut self, pwr: &mut PWR, rcc: &mut RCC) -> &Self {
+        self.enable_clock_source(rcc)
             .enable_bdr(rcc, pwr)
-            .enable_rtc(&mut rcc.bdcr)
-            .set_prediv();
+            .enable_rtc(rcc);
+
+        self.rtc.cr.modify(|_, w| w.fmt().set_bit());
+        self.set_prediv();
         self
     }
 
     fn modify<F>(&mut self, mut function: F)
-    where
-        F: FnMut(&mut RTC),
+        where
+            F: FnMut(&mut RTC),
     {
-        self.rtc.wpr.write(|w| w.key().bits(self.unlock_key.0));
-        self.rtc.wpr.write(|w| w.key().bits(self.unlock_key.1));
+        self.write_protection(Protection::Disable);
         self.initf(Init::Start);
         function(&mut self.rtc);
         self.initf(Init::Stop);
+        self.write_protection(Protection::Enable)
     }
 
     fn initf(&mut self, init: Init) {
@@ -157,7 +186,7 @@ impl Rtc {
                 }
             }
             Init::Stop => {
-                if self.rtc.isr.read().init().bit_is_clear() {
+                if !self.rtc.isr.read().init().bit_is_clear() {
                     self.rtc.isr.modify(|_, w| w.init().clear_bit());
                     while !self.rtc.isr.read().initf().bit_is_clear() {}
                 }
@@ -170,7 +199,7 @@ impl Rtc {
         match protection {
             Protection::Disable => {
                 self.rtc.wpr.write(|w| w.key().bits(self.unlock_key.0));
-                self.rtc.wpr.write(|w| w.key().bits(self.unlock_key.1));
+                self.rtc.wpr.write(|w| w.key().bits(self.unlock_key.1))
             }
             Protection::Enable => self.rtc.wpr.write(|w| w.key().bits(0xC0)),
         }
@@ -179,18 +208,18 @@ impl Rtc {
 
 impl RtcSetup<Rtc> for Rtc {
     /// Enable different clock sources for RTC, picked by user
-    fn enable_clock_source(&self, bdcr: &mut BDCR, rcc: &mut RCC) -> &Self {
+    fn enable_clock_source(&self, rcc: &mut RCC) -> &Self {
         match self.source {
             ClockSource::LSI => {
                 rcc.csr.modify(|_, w| w.lsion().set_bit());
                 while rcc.csr.read().lsirdy().bit_is_clear() {}
             }
             ClockSource::LSE(bypass) => {
-                bdcr.modify(|_, w| {
+                rcc.bdcr.modify(|_, w| {
                     w.lseon().set_bit();
                     w.lsebyp().bit(bypass)
                 });
-                while bdcr.read().lserdy().bit_is_clear() {}
+                while rcc.bdcr.read().lserdy().bit_is_clear() {}
             }
             ClockSource::HSE(bypass) => {
                 rcc.cr.modify(|_, w| {
@@ -211,14 +240,14 @@ impl RtcSetup<Rtc> for Rtc {
     }
 
     /// Enable RTC with clock source selected by user
-    fn enable_rtc(&self, bdcr: &mut BDCR) -> &Self {
-        bdcr.modify(|_, w| w.bdrst().enabled());
-        match self.source {
-            ClockSource::LSI => bdcr.modify(|_, w| w.rtcsel().lsi()),
-            ClockSource::LSE(_) => bdcr.modify(|_, w| w.rtcsel().lse()),
-            ClockSource::HSE(_) => bdcr.modify(|_, w| w.rtcsel().hse()),
-        }
-        bdcr.modify(|_, w| {
+    fn enable_rtc(&self, rcc: &mut RCC) -> &Self {
+        rcc.bdcr.modify(|_, w| w.bdrst().enabled());
+        rcc.bdcr.modify(|_, w| {
+            match self.source {
+                ClockSource::LSI => w.rtcsel().lsi(),
+                ClockSource::LSE(_) => w.rtcsel().lse(),
+                ClockSource::HSE(_) => w.rtcsel().hse(),
+            };
             w.rtcen().enabled();
             w.bdrst().disabled()
         });
@@ -226,57 +255,55 @@ impl RtcSetup<Rtc> for Rtc {
     }
 
     /// Set prescaler value for RTC
-    fn set_prediv(&self) -> &Self {
-        self.rtc.prer.modify(|_, w| {
-            w.prediv_a().bits(self.prediv.a);
-            w.prediv_s().bits(self.prediv.s)
+    fn set_prediv(&mut self) -> &Self {
+        let a = self.prediv.a;
+        let s = self.prediv.s;
+        self.modify(|rtc| {
+            rtc.prer.modify(|_, w| {
+                w.prediv_a().bits(a);
+                w.prediv_s().bits(s)
+            })
         });
         self
     }
 }
 
 impl TimeAccess for Rtc {
-    fn time(&self) -> NaiveTime {
+    fn time(&self) -> Time {
         BcdTime {
-            h: Bcd {
+            hour: Bcd {
                 tens: self.rtc.tr.read().ht().bits(),
                 units: self.rtc.tr.read().hu().bits(),
             },
-            m: Bcd {
+            minutes: Bcd {
                 tens: self.rtc.tr.read().mnt().bits(),
                 units: self.rtc.tr.read().mnu().bits(),
             },
-            s: Bcd {
+            seconds: Bcd {
                 tens: self.rtc.tr.read().st().bits(),
                 units: self.rtc.tr.read().su().bits(),
             },
         }
-        .time()
+            .time()
     }
 
-    fn set_time(&self, time: NaiveTime) {
+    fn set_time(&mut self, time: Time) {
         let bcd_time = BcdTime::from(time);
-        self.rtc.tr.modify(|_, w| {
-            w.ht().bits(bcd_time.h.tens);
-            w.hu().bits(bcd_time.h.units);
-            w.mnt().bits(bcd_time.m.tens);
-            w.mnu().bits(bcd_time.m.units);
-            w.st().bits(bcd_time.s.tens);
-            w.su().bits(bcd_time.s.units)
+        self.modify(|rtc| {
+            rtc.tr.modify(|_, w| {
+                w.ht().bits(bcd_time.hour.tens);
+                w.hu().bits(bcd_time.hour.units);
+                w.mnt().bits(bcd_time.minutes.tens);
+                w.mnu().bits(bcd_time.minutes.units);
+                w.st().bits(bcd_time.seconds.tens);
+                w.su().bits(bcd_time.seconds.units)
+            })
         })
-    }
-
-    fn ms(&self) -> u32 {
-        BcdTime::calc_ms(
-            self.rtc.ssr.read().bits(),
-            self.rtc.prer.read().prediv_a().bits(),
-            self.rtc.prer.read().prediv_s().bits(),
-        )
     }
 }
 
 impl DateAccess for Rtc {
-    fn date(&self) -> NaiveDate {
+    fn date(&self) -> Date {
         BcdDate {
             d: Bcd {
                 tens: self.rtc.dr.read().dt().bits(),
@@ -291,28 +318,30 @@ impl DateAccess for Rtc {
                 units: self.rtc.dr.read().yu().bits(),
             },
         }
-        .date()
+            .date()
     }
 
-    fn set_date(&self, date: NaiveDate) {
+    fn set_date(&mut self, date: Date) {
         let bcd_date = BcdDate::from(date);
-        self.rtc.dr.modify(|_, w| {
-            match bcd_date.m.tens > 0 {
-                true => w.mt().bit(true),
-                false => w.mt().bit(false),
-            };
-            w.dt().bits(bcd_date.d.tens);
-            w.du().bits(bcd_date.d.units);
-            w.mu().bits(bcd_date.m.units);
-            w.yt().bits(bcd_date.y.tens);
-            w.yu().bits(bcd_date.y.units)
+        self.modify(|rtc| {
+            rtc.dr.modify(|_, w| {
+                match bcd_date.m.tens > 0 {
+                    true => w.mt().bit(true),
+                    false => w.mt().bit(false),
+                };
+                w.dt().bits(bcd_date.d.tens);
+                w.du().bits(bcd_date.d.units);
+                w.mu().bits(bcd_date.m.units);
+                w.yt().bits(bcd_date.y.tens);
+                w.yu().bits(bcd_date.y.units)
+            })
         })
     }
 }
 
 trait RtcSetup<T> {
-    fn enable_clock_source(self, bdcr: &mut BDCR, rcc: &mut RCC) -> T;
-    fn enable_bdr(self, rcc: &mut RCC, pwr: &mut PWR) -> T;
-    fn enable_rtc(self, bdcr: &mut BDCR) -> T;
-    fn set_prediv(self) -> T;
+    fn enable_clock_source(&self, rcc: &mut RCC) -> &T;
+    fn enable_bdr(&self, rcc: &mut RCC, pwr: &mut PWR) -> &T;
+    fn enable_rtc(&self, rcc: &mut RCC) -> &T;
+    fn set_prediv(&mut self) -> &T;
 }
