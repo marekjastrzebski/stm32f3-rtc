@@ -123,8 +123,7 @@ impl Rtc {
             default: true,
         }
     }
-    /// Please select your own clock source, by picking it from ClockSource enum,
-    ///
+    /// Please select your own clock source, by picking it from ClockSource enum
     pub fn set_clock_source(&mut self, clock_source: ClockSource) -> &Self {
         self.source = clock_source;
         if !self.default {
@@ -156,6 +155,7 @@ impl Rtc {
         self
     }
 
+    /// Starts RTC clock
     pub fn start_clock(&mut self, pwr: &mut PWR, rcc: &mut RCC) -> &Self {
         self.enable_clock_source(rcc)
             .enable_bdr(rcc, pwr)
@@ -232,6 +232,7 @@ impl RtcSetup<Rtc> for Rtc {
         self
     }
 
+    /// Enable bdr
     fn enable_bdr(&self, rcc: &mut RCC, pwr: &mut PWR) -> &Self {
         rcc.apb1enr.modify(|_, w| w.pwren().enabled());
         pwr.cr.modify(|_, w| w.dbp().set_bit());
@@ -269,6 +270,7 @@ impl RtcSetup<Rtc> for Rtc {
 }
 
 impl TimeAccess for Rtc {
+    /// Returns current time as Time struct
     fn time(&self) -> Time {
         BcdTime {
             hour: Bcd {
@@ -287,6 +289,10 @@ impl TimeAccess for Rtc {
             .time()
     }
 
+    /// Set time by Time struct
+    /// ```
+    /// rtc.set_time(Time::from(12,30,0));
+    /// ```
     fn set_time(&mut self, time: Time) {
         let bcd_time = BcdTime::from(time);
         self.modify(|rtc| {
@@ -303,6 +309,8 @@ impl TimeAccess for Rtc {
 }
 
 impl DateAccess for Rtc {
+
+    /// Returns current date as Date struct
     fn date(&self) -> Date {
         BcdDate {
             d: Bcd {
@@ -321,6 +329,11 @@ impl DateAccess for Rtc {
             .date()
     }
 
+    /// Set date with Date struct, It takes year between 2000 and 2154,
+    /// if you will pick some other year it is going to reset it to 2000
+    /// ```
+    /// rtc.set_date(Date::from(1,1,2024));
+    /// ```
     fn set_date(&mut self, date: Date) {
         let bcd_date = BcdDate::from(date);
         self.modify(|rtc| {

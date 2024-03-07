@@ -10,6 +10,7 @@ pub trait DateAccess {
     fn set_date(&mut self, date: Date);
 }
 
+/// Keeps date in struct with easy access
 pub struct Date {
     pub day: u8,
     pub month: u8,
@@ -17,11 +18,14 @@ pub struct Date {
 }
 
 impl Date {
+    /// Create a new Date struct from fallowing arguments,
+    /// (day, month, year)
     pub fn from(day: u8, month: u8, year: u32) -> Date {
         Date { day, month, year }
     }
 }
 
+/// Keeps time in struct with easy access
 pub struct Time {
     pub hour: u8,
     pub minute: u8,
@@ -29,6 +33,8 @@ pub struct Time {
 }
 
 impl Time {
+    /// Create a new Time struct from following arguments
+    /// (hour, minute, second)
     pub fn from(hour: u8, minute: u8, second: u8) -> Time {
         Time {
             hour,
@@ -64,8 +70,7 @@ pub(crate) struct BcdTime {
 }
 
 impl BcdTime {
-    /// Returns the time in NaiveDate format
-    /// Takes (hour, minutes, seconds)
+    /// Returns the time in Time struct
     pub(crate) fn time(&self) -> Time {
         Time {
             hour: self.hour.get(),
@@ -77,9 +82,9 @@ impl BcdTime {
 
 impl BcdConvert for BcdTime {}
 
-/// API for easy create BCD time from NaiveTime
+/// API for easy create BCD time from Time struct
 impl From<Time> for BcdTime {
-    /// Create BCD time from NaiveTime
+    /// Create BCD time from Time struct
     fn from(time: Time) -> Self {
         BcdTime {
             hour: Self::bcd_encode(time.hour),
@@ -111,9 +116,9 @@ impl BcdDate {
 
 /// API for easy create BCD date from NaiveDate
 impl From<Date> for BcdDate {
-    /// Create BCD encoded date from NaiveDate
+    /// Create BCD encoded date from Date struct
     fn from(date: Date) -> Self {
-        // Becouse of RTC_DR limitation we cannot use dates earlier than 2000
+        // Because of RTC_DR limitation we cannot use dates earlier than 2000
         let year = match date.year < 2000 || date.year > 2154 {
             true => 2000,
             false => date.year,
