@@ -17,4 +17,5 @@ stm32f303xc = ["stm32f3xx-hal/stm32f303xc"]
 [dependencies]
 stm32f3xx-hal = { version = "0.10.0", optional = true }
 cortex-m-semihosting = "0.5.0"
-
+cortex-m-rt = "0.7.3"
+cortex-m = "0.7.7"

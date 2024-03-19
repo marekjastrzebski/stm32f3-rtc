@@ -5,6 +5,22 @@ it means that user using this API doesn't waste his time on setups or configurat
 for particular elements, but if you want to dive into some individual settings it gave you that opportunity.
 But if you want to just quickly setup clock that holds specified date or time, you just doing it with 2 lines of code.
 
+## Features
+List of features that are already available 
+
+1. [x] [RTC Setup](#1-creating-rtc-instance) 
+2. [x] [LSI - Low Speed Internal clock](#4-setup-different-clock-source)
+3. [x] [LSE - Low Speed External clock](#4-setup-different-clock-source)
+4. [x] [HSE - High Speed External clock (max **12 MHz**)](#4-setup-different-clock-source)
+5. [x] [Time access/setup](#2-setup-and-read-time)
+6. [x] [Date access/setup](#3-setup-and-read-date)
+7. [x] Delay in seconds
+8. [x] Automatic **Wake up** Setup
+9. [ ] Alarms
+10. [ ] Time-stamps
+11. [ ] Tamper
+12. [ ] Daylight saving (Summer/Winter time)
+
 ## Compatibility
 This lib is designed to work with STM32 F3 family microcontrollers, especially with 
 those described in [RM0316](https://www.google.com/url?sa=t&rct=j&q=&esrc=s&source=web&cd=&ved=2ahUKEwjnjfyY1OKEAxW7QvEDHU2ABBQQFnoECBMQAQ&url=https%3A%2F%2Fwww.st.com%2Fresource%2Fen%2Freference_manual%2Frm0316-stm32f303xbcde-stm32f303x68-stm32f328x8-stm32f358xc-stm32f398xe-advanced-armbased-mcus-stmicroelectronics.pdf&usg=AOvVaw0mltpVxT-GB1zXjNXCP50O&opi=89978449)
@@ -51,7 +67,7 @@ If you don't need super accurate clock it is most of the time enough.
  use stm32f3_rtc::datetime::{Date, DateAccess};
  use stm32f3_rtc::rtc::Rtc;
  use stm32f3xx_hal::pac;
- use cortex_m_semihosting;
+use cortex_m_semihosting::hprintln;
 
  let mut peripheral = pac::Peripherals::take().unwrap();
  let rtc = Rtc::new(peripheral.RTC).start_clock(&mut peripheral.PWR, &mut peripheral.RCC);
@@ -67,10 +83,28 @@ If you don't need super accurate clock it is most of the time enough.
  ```rust
  use stm32f3_rtc::rtc::{ClockSource, Rtc};
  use stm32f3xx_hal::pac;
- use cortex_m_semihosting;
+use cortex_m_semihosting::hprintln;
 
  let mut peripheral = pac::Peripherals::take().unwrap();
  let rtc = Rtc::new(peripheral.RTC)
      .set_clock_source(ClockSource::LSE(true))
      .start_clock(&mut peripheral.PWR, &mut peripheral.RCC);
  ```
+
+#### 5. Using delay:
+ ```rust
+ use stm32f3_rtc::rtc::{ClockSource, Rtc};
+ use stm32f3xx_hal::pac;
+use cortex_m_semihosting::hprintln;
+
+ let mut peripheral = pac::Peripherals::take().unwrap();
+ let rtc = Rtc::new(peripheral.RTC)
+     .start_clock(&mut peripheral.PWR, &mut peripheral.RCC);
+rtc.set_time(Time::from(12,30,0));
+
+loop {
+    rtc.delay(2);
+    hprintln!("This text will appear every 2 seconds");
+}
+ ```
+

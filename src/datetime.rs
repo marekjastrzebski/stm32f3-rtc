@@ -42,6 +42,11 @@ impl Time {
             second,
         }
     }
+
+    /// Returns time in seconds
+    pub fn to_seconds(&self) -> u32 {
+        (self.hour as u32) * 3600 + (self.minute as u32) * 60 + (self.second as u32)
+    }
 }
 
 /// Single BCD encoded value

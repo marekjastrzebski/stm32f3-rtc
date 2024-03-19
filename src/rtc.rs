@@ -1,13 +1,14 @@
 use crate::datetime::{Bcd, BcdDate, BcdTime, DateAccess, TimeAccess};
 use datetime::{Date, Time};
 use stm32f3xx_hal::pac::{PWR, RCC, RTC};
+use wakeup::WakeupManager;
 
 enum Init {
     Start,
     Stop,
 }
 
-enum Protection {
+pub(crate) enum Protection {
     Enable,
     Disable,
 }
@@ -27,7 +28,7 @@ pub enum ClockSource {
     /// ```
     LSE(bool),
     /// High Speed External clock source - it is external clock source, very accurate.
-    /// Please note that you can set bypass by setting bool argument. (Preferably should by true)
+    /// Please note that you can set bypass by setting bool argument. (Preferably should be true)
     /// ```
     /// use stm32f3_rtc::rtc::ClockSource;
     /// ClockSource::HSE(true);
@@ -42,11 +43,11 @@ struct Prediv {
 
 /// Create instance of RTC register API for easy manipulate values in this
 /// register. Gives you easy access to date, time, alarms, milliseconds or wakeup.
-/// It enable RTC without any additional actions needed.
+/// It enables RTC without any additional actions needed.
 ///
 /// It contains default (most typical clocks frequencies) for LSI, LSE and HSE.
 /// You can run without any perscaller setup:
-/// - LSI - 40 kHz - this clock source might be not accurate. There might by sight
+/// - LSI - 40 kHz - this clock source might be not accurate. There might be sight
 /// differences in second counting frequency. But for sure you have this clock source
 /// because it is built in.
 /// - LSE - 32.768 kHz
@@ -60,18 +61,21 @@ struct Prediv {
 /// use stm32f3xx_hal::pac;
 ///
 /// let mut peripheral = pac::Peripherals::take().unwrap();
-/// let rtc = Rtc::new(peripheral.RTC).start_clock(&mut peripheral.PWR, &mut peripheral.RCC);
+/// let rtc = Rtc::new(peripheral.RTC).start_clock(&mut peripheral.PWR, &mut peripheral.RCC)
+///     .start_clock(&mut peripheral.PWR, &mut peripheral.RCC);
 /// ```
 ///
 /// 2. Setup and read time:
+/// By default it runs on LSI clock source
 /// ```
 /// use stm32f3_rtc::datetime::{Time, TimeAccess};
 /// use stm32f3_rtc::rtc::Rtc;
 /// use stm32f3xx_hal::pac;
-/// use cortex_m_semihosting;
+/// use cortex_m_semihosting::hprintln;
 ///
 /// let mut peripheral = pac::Peripherals::take().unwrap();
-/// let rtc = Rtc::new(peripheral.RTC).start_clock(&mut peripheral.PWR, &mut peripheral.RCC);
+/// let rtc = Rtc::new(peripheral.RTC).start_clock(&mut peripheral.PWR, &mut peripheral.RCC)
+///     .start_clock(&mut peripheral.PWR, &mut peripheral.RCC);
 /// rtc.set_time(Time::from(12,30,0));
 /// let time = rtc.time();
 /// hprintln!("{}:{}:{}", time.hour, time.minute, time.second);
@@ -82,10 +86,11 @@ struct Prediv {
 /// use stm32f3_rtc::datetime::{Date, DateAccess};
 /// use stm32f3_rtc::rtc::Rtc;
 /// use stm32f3xx_hal::pac;
-/// use cortex_m_semihosting;
+/// use cortex_m_semihosting::hprintln;
 ///
 /// let mut peripheral = pac::Peripherals::take().unwrap();
-/// let rtc = Rtc::new(peripheral.RTC).start_clock(&mut peripheral.PWR, &mut peripheral.RCC);
+/// let rtc = Rtc::new(peripheral.RTC).start_clock(&mut peripheral.PWR, &mut peripheral.RCC)
+///     .start_clock(&mut peripheral.PWR, &mut peripheral.RCC);
 /// rtc.set_date(Date::from(1,1,2024));
 /// let date = rtc.date();
 /// hprintln!("{}.{}.{}", date.day, date.month, date.year);
@@ -98,7 +103,7 @@ struct Prediv {
 /// ```
 /// use stm32f3_rtc::rtc::{ClockSource, Rtc};
 /// use stm32f3xx_hal::pac;
-/// use cortex_m_semihosting;
+/// use cortex_m_semihosting::hprintln;
 ///
 /// let mut peripheral = pac::Peripherals::take().unwrap();
 /// let rtc = Rtc::new(peripheral.RTC)
@@ -106,7 +111,7 @@ struct Prediv {
 ///     .start_clock(&mut peripheral.PWR, &mut peripheral.RCC);
 /// ```
 pub struct Rtc {
-    rtc: RTC,
+    pub(crate) rtc: RTC,
     unlock_key: (u8, u8),
     source: ClockSource,
     prediv: Prediv,
@@ -123,6 +128,7 @@ impl Rtc {
             default: true,
         }
     }
+
     /// Please select your own clock source, by picking it from ClockSource enum
     pub fn set_clock_source(&mut self, clock_source: ClockSource) -> &Self {
         self.source = clock_source;
@@ -156,7 +162,7 @@ impl Rtc {
     }
 
     /// Starts RTC clock
-    pub fn start_clock(&mut self, pwr: &mut PWR, rcc: &mut RCC) -> &Self {
+    pub fn start_clock(&mut self, pwr: &mut PWR, rcc: &mut RCC) -> &mut Self {
         self.enable_clock_source(rcc)
             .enable_bdr(rcc, pwr)
             .enable_rtc(rcc);
@@ -166,9 +172,28 @@ impl Rtc {
         self
     }
 
-    fn modify<F>(&mut self, mut function: F)
-        where
-            F: FnMut(&mut RTC),
+    /// Stop executing program for a given seconds
+    ///
+    /// **Note:** Works only when RTC is started.
+    ///
+    /// **Note:** If seconds > 86390 = no delay effect
+    pub fn delay(&self, seconds: u32) {
+        if seconds > 86390 {
+            return;
+        }
+        let time = self.time();
+        let stop_sleep = time.to_seconds() + seconds;
+        if stop_sleep > 86400 {
+            while time.to_seconds() < 86400 {}
+            while time.to_seconds() < (stop_sleep - 86400) {}
+            return;
+        }
+        while self.time().to_seconds() < stop_sleep {}
+    }
+
+    pub(crate) fn modify<F>(&mut self, mut function: F)
+    where
+        F: FnMut(&mut RTC),
     {
         self.write_protection(Protection::Disable);
         self.initf(Init::Start);
@@ -177,6 +202,9 @@ impl Rtc {
         self.write_protection(Protection::Enable)
     }
 
+    pub fn get_wakeup_manager(&mut self) -> WakeupManager {
+        WakeupManager::new(self)
+    }
     fn initf(&mut self, init: Init) {
         match init {
             Init::Start => {
@@ -195,7 +223,7 @@ impl Rtc {
     }
 
     /// Enable/Disable write protection for RTC module
-    fn write_protection(&mut self, protection: Protection) {
+    pub(crate) fn write_protection(&self, protection: Protection) {
         match protection {
             Protection::Disable => {
                 self.rtc.wpr.write(|w| w.key().bits(self.unlock_key.0));
@@ -286,7 +314,7 @@ impl TimeAccess for Rtc {
                 units: self.rtc.tr.read().su().bits(),
             },
         }
-            .time()
+        .time()
     }
 
     /// Set time by Time struct
@@ -309,7 +337,6 @@ impl TimeAccess for Rtc {
 }
 
 impl DateAccess for Rtc {
-
     /// Returns current date as Date struct
     fn date(&self) -> Date {
         BcdDate {
@@ -326,7 +353,7 @@ impl DateAccess for Rtc {
                 units: self.rtc.dr.read().yu().bits(),
             },
         }
-            .date()
+        .date()
     }
 
     /// Set date with Date struct, It takes year between 2000 and 2154,
